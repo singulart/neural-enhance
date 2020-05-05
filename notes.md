@@ -2,7 +2,7 @@
 
 Ok, finally I've made this software working on my PC (Windows 10, Nvidia 1080ti GPU). If you're going to create a similar setup, be aware that the Theano framework used by @alexjc's implementation is not supported for quite some time. Which means you shouldn't expect much support in case you step into troubles. And it is highly likely you will do so :) 
 
-The key thing for me was this 2017 tutorial on Theano setup: https://github.com/philferriere/dlwin/blob/master/README_Jan2017.md. Thanks, @philferriere!!! If you follow it nicely, chances are you will make things work. Not going to document every single step, but here's what is in my working Anaconda env (the Python used is 3.6):
+The key thing for me was this [2017 tutorial](https://github.com/philferriere/dlwin/blob/master/README_Jan2017.md) on Theano setup. Thanks, @philferriere!!! If you follow it nicely, chances are you will make things work. Not going to document every single step, but here's what is in my working Anaconda env (the Python used is 3.6):
 ```
 # packages in environment at D:\anaconda3\envs\theano:
 # Name                    Version                   Build  Channel
