@@ -95,9 +95,12 @@ index 8bfb05a7d..6454d039a 100644
  def test_nvidia_driver2():
 ```
 
-Other than this, no issues with installing Theano from source! 
+Other than this, no issues with installing Theano from source! Oh, you might need to install Cython, too
 
-
+Lasagne was installed simply via pip:
+```
+pip install --upgrade --no-deps https://github.com/Lasagne/Lasagne/archive/master.zip
+```
 
 #### Running the training 
 
