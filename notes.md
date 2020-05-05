@@ -3,7 +3,7 @@
 Ok, finally I've made this software working on my PC (Windows 10, Nvidia 1080ti GPU). If you're going to create a similar setup, be aware that the Theano framework used by @alexjc's implementation is not supported for quite some time. Which means you shouldn't expect much support in case you step into troubles. And it is highly likely you will do so :) 
 
 The key thing for me was this 2017 tutorial on Theano setup: https://github.com/philferriere/dlwin/blob/master/README_Jan2017.md. Thanks, @philferriere!!! If you follow it nicely, chances are you will make things work. Not going to document every single step, but here's what is in my working Anaconda env (the Python used is 3.6):
-
+```
 # packages in environment at D:\anaconda3\envs\theano:
 # Name                    Version                   Build  Channel
 blas                      1.0                         mkl    anaconda
@@ -40,7 +40,7 @@ wincertstore              0.2                   py36_1003    conda-forge
 xz                        5.2.5                h2fa13f4_0    conda-forge
 zlib                      1.2.11           vc14h1cdd9ab_1  [vc14]  anaconda
 zstd                      1.4.4                h9f78265_3    conda-forge
-
+```
 The Theano was installed using the guide cited above. I've got only two caveats:
 
 Caveat #1: some weird issue with unicode. I have Russian Windows, so no surprise :) This is how I fixed it:
