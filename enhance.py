@@ -591,7 +591,7 @@ if __name__ == "__main__":
         enhancer.train()
     else:
         enhancer = NeuralEnhancer(loader=False)
-        for filename in args.files:
+        for filename in glob.glob(args.files[0]):
             print(filename, end=' ')
             img = scipy.ndimage.imread(filename, mode='RGB')
             out = enhancer.process(img)
