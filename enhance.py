@@ -169,16 +169,16 @@ class DataLoader(threading.Thread):
                 self.add_to_buffer(f)
 
     def add_to_buffer(self, f):
-        filename = os.path.join(self.cwd, f)
+        filename1 = os.path.join(self.cwd, f)
         try:
-            orig = PIL.Image.open(filename).convert('RGB')
+            orig = PIL.Image.open(filename1).convert('RGB')
             scale = 2 ** random.randint(0, args.train_scales)
             if scale > 1 and all(s//scale >= args.batch_shape for s in orig.size):
                 orig = orig.resize((orig.size[0]//scale, orig.size[1]//scale), resample=PIL.Image.LANCZOS)
             if any(s < args.batch_shape for s in orig.size):
                 raise ValueError('Image is too small for training with size {}'.format(orig.size))
         except Exception as e:
-            warn('Could not load `{}` as image.'.format(filename),
+            warn('Could not load `{}` as image.'.format(filename1),
                  '  - Try fixing or removing the file before next run.')
             self.files.remove(f)
             return
@@ -246,11 +246,11 @@ class SubpixelReshuffleLayer(lasagne.layers.Layer):
         def up(d): return self.upscale * d if d else d
         return input_shape[0], self.channels, up(input_shape[2]), up(input_shape[3])
 
-    def get_output_for(self, input, deterministic=False, **kwargs):
-        out, r = T.zeros(self.get_output_shape_for(input.shape)), self.upscale
+    def get_output_for(self, input1, deterministic=False, **kwargs):
+        out1, r = T.zeros(self.get_output_shape_for(input1.shape)), self.upscale
         for y, x in itertools.product(range(r), repeat=2):
-            out = T.inc_subtensor(out[:,:,y::r,x::r], input[:, r*y+x::r*r, :, :])
-        return out
+            out1 = T.inc_subtensor(out1[:, :, y::r, x::r], input1[:, r*y+x::r*r, :, :])
+        return out1
 
 
 class Model(object):
@@ -278,7 +278,7 @@ class Model(object):
     def last_layer(self):
         return list(self.network.values())[-1]
 
-    def make_layer(self, name, input, units, filter_size=(3,3), stride=(1,1), pad=(1,1), alpha=0.25):
+    def make_layer(self, name, input, units, filter_size=(3, 3), stride=(1, 1), pad=(1, 1), alpha=0.25):
         conv = ConvLayer(input, units, filter_size, stride=stride, pad=pad, nonlinearity=None)
         prelu = lasagne.layers.ParametricRectifierLayer(conv, alpha=lasagne.init.Constant(alpha))
         self.network[name+'x'] = conv
@@ -291,24 +291,25 @@ class Model(object):
         return ElemwiseSumLayer([input, self.last_layer()]) if args.generator_residual else self.last_layer()
 
     def setup_generator(self, input, config):
-        for k, v in config.items(): setattr(args, k, v)
+        for k, v in config.items():
+            setattr(args, k, v)
         args.zoom = 2**(args.generator_upscale - args.generator_downscale)
 
         units_iter = extend(args.generator_filters)
         units = next(units_iter)
-        self.make_layer('iter.0', input, units, filter_size=(7,7), pad=(3,3))
+        self.make_layer('iter.0', input, units, filter_size=(7, 7), pad=(3,3))
 
         for i in range(0, args.generator_downscale):
-            self.make_layer('downscale%i'%i, self.last_layer(), next(units_iter), filter_size=(4,4), stride=(2,2))
+            self.make_layer('downscale%i' % i, self.last_layer(), next(units_iter), filter_size=(4, 4), stride=(2, 2))
 
         units = next(units_iter)
         for i in range(0, args.generator_blocks):
-            self.make_block('iter.%i'%(i+1), self.last_layer(), units)
+            self.make_block('iter.%i' % (i+1), self.last_layer(), units)
 
         for i in range(0, args.generator_upscale):
             u = next(units_iter)
-            self.make_layer('upscale%i.2'%i, self.last_layer(), u*4)
-            self.network['upscale%i.1'%i] = SubpixelReshuffleLayer(self.last_layer(), u, 2)
+            self.make_layer('upscale%i.2' % i, self.last_layer(), u*4)
+            self.network['upscale%i.1' % i] = SubpixelReshuffleLayer(self.last_layer(), u, 2)
 
         self.network['out'] = ConvLayer(self.last_layer(), 3, filter_size=(7,7), pad=(3,3), nonlinearity=None)
 
@@ -324,17 +325,17 @@ class Model(object):
         self.network['pool1'] = PoolLayer(self.network['conv1_2'], 2, mode='max')
         self.network['conv2_1'] = ConvLayer(self.network['pool1'],   128, 3, pad=1)
         self.network['conv2_2'] = ConvLayer(self.network['conv2_1'], 128, 3, pad=1)
-        self.network['pool2']   = PoolLayer(self.network['conv2_2'], 2, mode='max')
+        self.network['pool2'] = PoolLayer(self.network['conv2_2'], 2, mode='max')
         self.network['conv3_1'] = ConvLayer(self.network['pool2'],   256, 3, pad=1)
         self.network['conv3_2'] = ConvLayer(self.network['conv3_1'], 256, 3, pad=1)
         self.network['conv3_3'] = ConvLayer(self.network['conv3_2'], 256, 3, pad=1)
         self.network['conv3_4'] = ConvLayer(self.network['conv3_3'], 256, 3, pad=1)
-        self.network['pool3']   = PoolLayer(self.network['conv3_4'], 2, mode='max')
+        self.network['pool3'] = PoolLayer(self.network['conv3_4'], 2, mode='max')
         self.network['conv4_1'] = ConvLayer(self.network['pool3'],   512, 3, pad=1)
         self.network['conv4_2'] = ConvLayer(self.network['conv4_1'], 512, 3, pad=1)
         self.network['conv4_3'] = ConvLayer(self.network['conv4_2'], 512, 3, pad=1)
         self.network['conv4_4'] = ConvLayer(self.network['conv4_3'], 512, 3, pad=1)
-        self.network['pool4']   = PoolLayer(self.network['conv4_4'], 2, mode='max')
+        self.network['pool4'] = PoolLayer(self.network['conv4_4'], 2, mode='max')
         self.network['conv5_1'] = ConvLayer(self.network['pool4'],   512, 3, pad=1)
         self.network['conv5_2'] = ConvLayer(self.network['conv5_1'], 512, 3, pad=1)
         self.network['conv5_3'] = ConvLayer(self.network['conv5_2'], 512, 3, pad=1)
@@ -367,24 +368,26 @@ class Model(object):
 
         data = pickle.load(bz2.open(vgg19_file, 'rb'))
         layers = lasagne.layers.get_all_layers(self.last_layer(), treat_as_input=[self.network['percept']])
-        for p, d in zip(itertools.chain(*[l.get_params() for l in layers]), data): p.set_value(d)
+        for p, d in zip(itertools.chain(*[l.get_params() for l in layers]), data):
+            p.set_value(d)
 
     def list_generator_layers(self):
-        for l in lasagne.layers.get_all_layers(self.network['out'], treat_as_input=[self.network['img']]):
-            if not l.get_params(): continue
-            name = list(self.network.keys())[list(self.network.values()).index(l)]
-            yield name, l
+        for la in lasagne.layers.get_all_layers(self.network['out'], treat_as_input=[self.network['img']]):
+            if not la.get_params():
+                continue
+            name = list(self.network.keys())[list(self.network.values()).index(la)]
+            yield name, la
 
     @staticmethod
     def get_filename(absolute=False):
-        filename = 'ne%ix-%s-%s-%s.pkl.bz2' % (args.zoom, args.type, args.model, __version__)
-        return os.path.join(os.path.dirname(__file__), filename) if absolute else filename
+        filename2 = 'ne%ix-%s-%s-%s.pkl.bz2' % (args.zoom, args.type, args.model, __version__)
+        return os.path.join(os.path.dirname(__file__), filename2) if absolute else filename2
 
     def save_generator(self):
         def cast(p): return p.get_value().astype(np.float16)
         params = {k: [cast(p) for p in l.get_params()] for (k, l) in self.list_generator_layers()}
-        config = {k: getattr(args, k) for k in ['generator_blocks', 'generator_residual', 'generator_filters'] + \
-                                               ['generator_upscale', 'generator_downscale']}
+        config = {k: getattr(args, k) for k in ['generator_blocks', 'generator_residual', 'generator_filters'] +
+                  ['generator_upscale', 'generator_downscale']}
         
         pickle.dump((config, params), bz2.open(self.get_filename(absolute=True), 'wb'))
         print('  - Saved model as `{}` after training.'.format(self.get_filename()))
@@ -394,7 +397,8 @@ class Model(object):
             if args.train:
                 return {}, {}
             error("Model file with pre-trained convolution layers not found. Download it here...",
-                  "https://github.com/alexjc/neural-enhance/releases/download/v%s/%s"%(__version__, self.get_filename()))
+                  "https://github.com/alexjc/neural-enhance/releases/download/v%s/%s"
+                  % (__version__, self.get_filename()))
         print('  - Loaded file `{}` with trained model.'.format(self.get_filename()))
         return pickle.load(bz2.open(self.get_filename(absolute=True), 'rb'))
 
@@ -418,7 +422,7 @@ class Model(object):
 
     @staticmethod
     def loss_total_variation(x):
-        return T.mean(((x[:,:,:-1,:-1] - x[:,:,1:,:-1])**2 + (x[:,:,:-1,:-1] - x[:,:,:-1,1:])**2)**1.25)
+        return T.mean(((x[:, :, :-1, :-1] - x[:, :, 1:, :-1])**2 + (x[:, :, :-1, :-1] - x[:, :, :-1, 1:])**2)**1.25)
 
     @staticmethod
     def loss_adversarial(d):
@@ -432,7 +436,7 @@ class Model(object):
         # Helper function for rendering test images during training, or standalone inference mode.
         input_tensor, seed_tensor = T.tensor4(), T.tensor4()
         input_layers = {self.network['img']: input_tensor, self.network['seed']: seed_tensor}
-        output = lasagne.layers.get_output([self.network[k] for k in ['seed','out']], input_layers, deterministic=True)
+        output = lasagne.layers.get_output([self.network[k] for k in ['seed', 'out']], input_layers, deterministic=True)
         self.predict = theano.function([seed_tensor], output)
 
         if not args.train:
