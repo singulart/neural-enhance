@@ -30,6 +30,24 @@ import itertools
 import threading
 import collections
 
+# Scientific & Imaging Libraries
+import numpy as np
+import scipy.ndimage
+import scipy.misc
+import PIL.Image
+
+# Numeric Computing (GPU)
+import theano
+import theano.tensor as T
+
+# Deep Learning Framework
+import lasagne
+from lasagne.layers import Conv2DLayer as ConvLayer, Deconv2DLayer as DeconvLayer, Pool2DLayer as PoolLayer
+from lasagne.layers import InputLayer, ConcatLayer, ElemwiseSumLayer, batch_norm
+
+# Support ansi colors in Windows too.
+if sys.platform == 'win32':
+    import colorama
 
 # Configure all options first so we can later custom-load other libraries (Theano) based on device specified by user.
 parser = argparse.ArgumentParser(description='Generate a new image by applying style onto a content image.',
@@ -66,7 +84,7 @@ add_arg('--perceptual-layer',   default='conv2_2', type=str,        help='Which 
 add_arg('--perceptual-weight',  default=1e0, type=float,            help='Weight for VGG-layer perceptual loss.')
 add_arg('--discriminator-size', default=32, type=int,               help='Multiplier for number of filters in D.')
 add_arg('--smoothness-weight',  default=2e5, type=float,            help='Weight of the total-variation loss.')
-add_arg('--adversary-weight',   default=5e2, type=float,            help='Weight of adversarial loss compoment.')
+add_arg('--adversary-weight',   default=5e2, type=float,            help='Weight of adversarial loss component.')
 add_arg('--generator-start',    default=0, type=int,                help='Epoch count to start training generator.')
 add_arg('--discriminator-start',default=1, type=int,                help='Epoch count to update the discriminator.')
 add_arg('--adversarial-start',  default=2, type=int,                help='Epoch for generator to use discriminator.')
@@ -74,7 +92,7 @@ add_arg('--device',             default='cpu', type=str,            help='Name o
 args = parser.parse_args()
 
 
-#----------------------------------------------------------------------------------------------------------------------
+# ----------------------------------------------------------------------------------------------------------------------
 
 # Color coded output helps visualize the information a little better, plus it looks cool!
 class ansi:
@@ -90,41 +108,31 @@ class ansi:
     CYAN_B = '\033[1;36m'
     ENDC = '\033[0m'
 
+
 def error(message, *lines):
     string = "\n{}ERROR: " + message + "{}\n" + "\n".join(lines) + ("{}\n" if lines else "{}")
     print(string.format(ansi.RED_B, ansi.RED, ansi.ENDC))
     sys.exit(-1)
 
+
 def warn(message, *lines):
     string = "\n{}WARNING: " + message + "{}\n" + "\n".join(lines) + "{}\n"
     print(string.format(ansi.YELLOW_B, ansi.YELLOW, ansi.ENDC))
 
+
 def extend(lst): return itertools.chain(lst, itertools.repeat(lst[-1]))
+
 
 print("""{}   {}Super Resolution for images and videos powered by Deep Learning!{}
   - Code licensed as AGPLv3, models under CC BY-NC-SA.{}""".format(ansi.CYAN_B, __doc__, ansi.CYAN, ansi.ENDC))
 
 # Load the underlying deep learning libraries based on the device specified.  If you specify THEANO_FLAGS manually,
-# the code assumes you know what you are doing and they are not overriden!
+# the code assumes you know what you are doing and they are not overridden!
 os.environ.setdefault('THEANO_FLAGS', 'floatX=float32,device={},force_device=True,allow_gc=True,'\
                                       'print_active_device=False'.format(args.device))
 
-# Scientific & Imaging Libraries
-import numpy as np
-import scipy.ndimage, scipy.misc, PIL.Image
-
-# Numeric Computing (GPU)
-import theano, theano.tensor as T
 T.nnet.softminus = lambda x: x - T.nnet.softplus(x)
 
-# Support ansi colors in Windows too.
-if sys.platform == 'win32':
-    import colorama
-
-# Deep Learning Framework
-import lasagne
-from lasagne.layers import Conv2DLayer as ConvLayer, Deconv2DLayer as DeconvLayer, Pool2DLayer as PoolLayer
-from lasagne.layers import InputLayer, ConcatLayer, ElemwiseSumLayer, batch_norm
 
 print('{}  - Using the device `{}` for neural computation.{}\n'.format(ansi.CYAN, theano.config.device, ansi.ENDC))
 
@@ -221,9 +229,9 @@ class DataLoader(threading.Thread):
         self.data_copied.set()
 
 
-#======================================================================================================================
+# ======================================================================================================================
 # Convolution Networks
-#======================================================================================================================
+# ======================================================================================================================
 
 class SubpixelReshuffleLayer(lasagne.layers.Layer):
     """Based on the code by ajbrock: https://github.com/ajbrock/Neural-Photo-Editor/
@@ -236,12 +244,12 @@ class SubpixelReshuffleLayer(lasagne.layers.Layer):
 
     def get_output_shape_for(self, input_shape):
         def up(d): return self.upscale * d if d else d
-        return (input_shape[0], self.channels, up(input_shape[2]), up(input_shape[3]))
+        return input_shape[0], self.channels, up(input_shape[2]), up(input_shape[3])
 
     def get_output_for(self, input, deterministic=False, **kwargs):
         out, r = T.zeros(self.get_output_shape_for(input.shape)), self.upscale
         for y, x in itertools.product(range(r), repeat=2):
-            out=T.inc_subtensor(out[:,:,y::r,x::r], input[:,r*y+x::r*r,:,:])
+            out = T.inc_subtensor(out[:,:,y::r,x::r], input[:, r*y+x::r*r, :, :])
         return out
 
 
@@ -263,9 +271,9 @@ class Model(object):
         self.load_generator(params)
         self.compile()
 
-    #------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     # Network Configuration
-    #------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
 
     def last_layer(self):
         return list(self.network.values())[-1]
@@ -307,13 +315,13 @@ class Model(object):
     def setup_perceptual(self, input):
         """Use lasagne to create a network of convolution layers using pre-trained VGG19 weights.
         """
-        offset = np.array([103.939, 116.779, 123.680], dtype=np.float32).reshape((1,3,1,1))
+        offset = np.array([103.939, 116.779, 123.680], dtype=np.float32).reshape((1, 3,  1, 1))
         self.network['percept'] = lasagne.layers.NonlinearityLayer(input, lambda x: ((x+0.5)*255.0) - offset)
 
         self.network['mse'] = self.network['percept']
         self.network['conv1_1'] = ConvLayer(self.network['percept'], 64, 3, pad=1)
         self.network['conv1_2'] = ConvLayer(self.network['conv1_1'], 64, 3, pad=1)
-        self.network['pool1']   = PoolLayer(self.network['conv1_2'], 2, mode='max')
+        self.network['pool1'] = PoolLayer(self.network['conv1_2'], 2, mode='max')
         self.network['conv2_1'] = ConvLayer(self.network['pool1'],   128, 3, pad=1)
         self.network['conv2_2'] = ConvLayer(self.network['conv2_1'], 128, 3, pad=1)
         self.network['pool2']   = PoolLayer(self.network['conv2_2'], 2, mode='max')
@@ -334,21 +342,20 @@ class Model(object):
 
     def setup_discriminator(self):
         c = args.discriminator_size
-        self.make_layer('disc1.1', batch_norm(self.network['conv1_2']), 1*c, filter_size=(5,5), stride=(2,2), pad=(2,2))
-        self.make_layer('disc1.2', self.last_layer(), 1*c, filter_size=(5,5), stride=(2,2), pad=(2,2))
-        self.make_layer('disc2', batch_norm(self.network['conv2_2']), 2*c, filter_size=(5,5), stride=(2,2), pad=(2,2))
-        self.make_layer('disc3', batch_norm(self.network['conv3_2']), 3*c, filter_size=(3,3), stride=(1,1), pad=(1,1))
+        self.make_layer('disc1.1', batch_norm(self.network['conv1_2']), 1*c, filter_size=(5, 5), stride=(2, 2), pad=(2, 2))
+        self.make_layer('disc1.2', self.last_layer(), 1*c, filter_size=(5, 5), stride=(2, 2), pad=(2, 2))
+        self.make_layer('disc2', batch_norm(self.network['conv2_2']), 2*c, filter_size=(5,5), stride=(2, 2), pad=(2, 2))
+        self.make_layer('disc3', batch_norm(self.network['conv3_2']), 3*c, filter_size=(3, 3), stride=(1, 1), pad=(1, 1))
         hypercolumn = ConcatLayer([self.network['disc1.2>'], self.network['disc2>'], self.network['disc3>']])
-        self.make_layer('disc4', hypercolumn, 4*c, filter_size=(1,1), stride=(1,1), pad=(0,0))
-        self.make_layer('disc5', self.last_layer(), 3*c, filter_size=(3,3), stride=(2,2))
-        self.make_layer('disc6', self.last_layer(), 2*c, filter_size=(1,1), stride=(1,1), pad=(0,0))
-        self.network['disc'] = batch_norm(ConvLayer(self.last_layer(), 1, filter_size=(1,1),
+        self.make_layer('disc4', hypercolumn, 4*c, filter_size=(1, 1), stride=(1, 1), pad=(0, 0))
+        self.make_layer('disc5', self.last_layer(), 3*c, filter_size=(3, 3), stride=(2, 2))
+        self.make_layer('disc6', self.last_layer(), 2*c, filter_size=(1, 1), stride=(1, 1), pad=(0, 0))
+        self.network['disc'] = batch_norm(ConvLayer(self.last_layer(), 1, filter_size=(1, 1),
                                                     nonlinearity=lasagne.nonlinearities.linear))
 
-
-    #------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     # Input / Output
-    #------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
 
     def load_perceptual(self):
         """Open the serialized parameters from a pre-trained network, and load them into the model created.
@@ -366,9 +373,10 @@ class Model(object):
         for l in lasagne.layers.get_all_layers(self.network['out'], treat_as_input=[self.network['img']]):
             if not l.get_params(): continue
             name = list(self.network.keys())[list(self.network.values()).index(l)]
-            yield (name, l)
+            yield name, l
 
-    def get_filename(self, absolute=False):
+    @staticmethod
+    def get_filename(absolute=False):
         filename = 'ne%ix-%s-%s-%s.pkl.bz2' % (args.zoom, args.type, args.model, __version__)
         return os.path.join(os.path.dirname(__file__), filename) if absolute else filename
 
@@ -383,14 +391,16 @@ class Model(object):
 
     def load_model(self):
         if not os.path.exists(self.get_filename(absolute=True)):
-            if args.train: return {}, {}
+            if args.train:
+                return {}, {}
             error("Model file with pre-trained convolution layers not found. Download it here...",
                   "https://github.com/alexjc/neural-enhance/releases/download/v%s/%s"%(__version__, self.get_filename()))
         print('  - Loaded file `{}` with trained model.'.format(self.get_filename()))
         return pickle.load(bz2.open(self.get_filename(absolute=True), 'rb'))
 
     def load_generator(self, params):
-        if len(params) == 0: return
+        if len(params) == 0:
+            return
         for k, l in self.list_generator_layers():
             assert k in params, "Couldn't find layer `%s` in loaded model.'" % k
             assert len(l.get_params()) == len(params[k]), "Mismatch in types of layers."
@@ -398,20 +408,24 @@ class Model(object):
                 assert v.shape == p.get_value().shape, "Mismatch in number of parameters for layer {}.".format(k)
                 p.set_value(v.astype(np.float32))
 
-    #------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     # Training & Loss Functions
-    #------------------------------------------------------------------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
 
-    def loss_perceptual(self, p):
+    @staticmethod
+    def loss_perceptual(p):
         return lasagne.objectives.squared_error(p[:args.batch_size], p[args.batch_size:]).mean()
 
-    def loss_total_variation(self, x):
+    @staticmethod
+    def loss_total_variation(x):
         return T.mean(((x[:,:,:-1,:-1] - x[:,:,1:,:-1])**2 + (x[:,:,:-1,:-1] - x[:,:,:-1,1:])**2)**1.25)
 
-    def loss_adversarial(self, d):
+    @staticmethod
+    def loss_adversarial(d):
         return T.mean(1.0 - T.nnet.softminus(d[args.batch_size:]))
 
-    def loss_discriminator(self, d):
+    @staticmethod
+    def loss_discriminator(d):
         return T.mean(T.nnet.softminus(d[args.batch_size:]) - T.nnet.softplus(d[:args.batch_size]))
 
     def compile(self):
@@ -421,7 +435,8 @@ class Model(object):
         output = lasagne.layers.get_output([self.network[k] for k in ['seed','out']], input_layers, deterministic=True)
         self.predict = theano.function([seed_tensor], output)
 
-        if not args.train: return
+        if not args.train:
+            return
 
         output_layers = [self.network['out'], self.network[args.perceptual_layer], self.network['disc']]
         gen_out, percept_out, disc_out = lasagne.layers.get_output(output_layers, input_layers, deterministic=False)
@@ -449,7 +464,6 @@ class Model(object):
         self.fit = theano.function([input_tensor, seed_tensor], gen_losses + [disc_out.mean(axis=(1,2,3))], updates=updates)
 
 
-
 class NeuralEnhancer(object):
 
     def __init__(self, loader):
@@ -458,7 +472,7 @@ class NeuralEnhancer(object):
                   .format(ansi.BLUE_B, args.epochs, args.batch_size, ansi.BLUE))
         else:
             if len(args.files) == 0: error("Specify the image(s) to enhance on the command-line.")
-            print('{}Enhancing {} image(s) specified on the command-line.{}'\
+            print('{}Enhancing {} image(s) specified on the command-line.{}'
                   .format(ansi.BLUE_B, len(args.files), ansi.BLUE))
 
         self.thread = DataLoader() if loader else None
@@ -466,7 +480,8 @@ class NeuralEnhancer(object):
 
         print('{}'.format(ansi.ENDC))
 
-    def imsave(self, fn, img):
+    @staticmethod
+    def imsave(fn, img):
         scipy.misc.toimage(np.transpose(img + 0.5, (1, 2, 0)).clip(0.0, 1.0) * 255.0, cmin=0, cmax=255).save(fn)
 
     def show_progress(self, orign, scald, repro):
@@ -476,7 +491,8 @@ class NeuralEnhancer(object):
             self.imsave('valid/%s_%03i_pixels.png' % (args.model, i), scald[i])
             self.imsave('valid/%s_%03i_reprod.png' % (args.model, i), repro[i])
 
-    def decay_learning_rate(self):
+    @staticmethod
+    def decay_learning_rate():
         l_r, t_cur = args.learning_rate, 0
 
         while True:
@@ -494,8 +510,10 @@ class NeuralEnhancer(object):
             for epoch in range(args.epochs):
                 total, stats = None, None
                 l_r = next(learning_rate)
-                if epoch >= args.generator_start: self.model.gen_lr.set_value(l_r)
-                if epoch >= args.discriminator_start: self.model.disc_lr.set_value(l_r)
+                if epoch >= args.generator_start:
+                    self.model.gen_lr.set_value(l_r)
+                if epoch >= args.discriminator_start:
+                    self.model.disc_lr.set_value(l_r)
 
                 for _ in range(args.epoch_size):
                     self.thread.copy(images, seeds)
@@ -531,8 +549,7 @@ class NeuralEnhancer(object):
         except KeyboardInterrupt:
             pass
 
-        print('\n{}Trained {}x super-resolution for {} epochs.{}'\
-                .format(ansi.CYAN_B, args.zoom, epoch+1, ansi.CYAN))
+        print('\n{}Trained {}x super-resolution for {} epochs.{}'.format(ansi.CYAN_B, args.zoom, epoch+1, ansi.CYAN))
         self.model.save_generator()
         print(ansi.ENDC)
 
@@ -548,25 +565,25 @@ class NeuralEnhancer(object):
         # Snap the image to a shape that's compatible with the generator (2x, 4x)
         s = 2 ** max(args.generator_upscale, args.generator_downscale)
         by, bx = original.shape[0] % s, original.shape[1] % s
-        original = original[by-by//2:original.shape[0]-by//2,bx-bx//2:original.shape[1]-bx//2,:]
+        original = original[by-by//2:original.shape[0]-by//2, bx-bx//2:original.shape[1]-bx//2, :]
 
-        # Prepare paded input image as well as output buffer of zoomed size.
+        # Prepare padded input image as well as output buffer of zoomed size.
         s, p, z = args.rendering_tile, args.rendering_overlap, args.zoom
         image = np.pad(original, ((p, p), (p, p), (0, 0)), mode='reflect')
         output = np.zeros((original.shape[0] * z, original.shape[1] * z, 3), dtype=np.float32)
 
         # Iterate through the tile coordinates and pass them through the network.
         for y, x in itertools.product(range(0, original.shape[0], s), range(0, original.shape[1], s)):
-            img = np.transpose(image[y:y+p*2+s,x:x+p*2+s,:] / 255.0 - 0.5, (2, 0, 1))[np.newaxis].astype(np.float32)
+            img = np.transpose(image[y:y+p*2+s, x:x+p*2+s, :] / 255.0 - 0.5, (2, 0, 1))[np.newaxis].astype(np.float32)
             *_, repro = self.model.predict(img)
-            output[y*z:(y+s)*z,x*z:(x+s)*z,:] = np.transpose(repro[0] + 0.5, (1, 2, 0))[p*z:-p*z,p*z:-p*z,:]
+            output[y*z:(y+s)*z, x*z:(x+s)*z, :] = np.transpose(repro[0] + 0.5, (1, 2, 0))[p*z:-p*z, p*z:-p*z, :]
             print('.', end='', flush=True)
         output = output.clip(0.0, 1.0) * 255.0
 
         # Match color histograms if the user specified this option.
         if args.rendering_histogram:
             for i in range(3):
-                output[:,:,i] = self.match_histograms(output[:,:,i], original[:,:,i])
+                output[:, :, i] = self.match_histograms(output[:, :, i], original[:, :, i])
 
         return scipy.misc.toimage(output, cmin=0, cmax=255)
 
