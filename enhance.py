@@ -48,6 +48,9 @@ from lasagne.layers import InputLayer, ConcatLayer, ElemwiseSumLayer, batch_norm
 # Support ansi colors in Windows too.
 if sys.platform == 'win32':
     import colorama
+    from colorama import Fore, Back, Style
+
+colorama.init()
 
 # Configure all options first so we can later custom-load other libraries (Theano) based on device specified by user.
 parser = argparse.ArgumentParser(description='Generate a new image by applying style onto a content image.',
@@ -94,37 +97,23 @@ args = parser.parse_args()
 
 # ----------------------------------------------------------------------------------------------------------------------
 
-# Color coded output helps visualize the information a little better, plus it looks cool!
-class ansi:
-    WHITE = '\033[0;97m'
-    WHITE_B = '\033[1;97m'
-    YELLOW = '\033[0;33m'
-    YELLOW_B = '\033[1;33m'
-    RED = '\033[0;31m'
-    RED_B = '\033[1;31m'
-    BLUE = '\033[0;94m'
-    BLUE_B = '\033[1;94m'
-    CYAN = '\033[0;36m'
-    CYAN_B = '\033[1;36m'
-    ENDC = '\033[0m'
-
 
 def error(message, *lines):
     string = "\n{}ERROR: " + message + "{}\n" + "\n".join(lines) + ("{}\n" if lines else "{}")
-    print(string.format(ansi.RED_B, ansi.RED, ansi.ENDC))
+    print(string.format(Fore.RED, Fore.RED, Fore.RESET))
     sys.exit(-1)
 
 
 def warn(message, *lines):
     string = "\n{}WARNING: " + message + "{}\n" + "\n".join(lines) + "{}\n"
-    print(string.format(ansi.YELLOW_B, ansi.YELLOW, ansi.ENDC))
+    print(string.format(Fore.YELLOW_, Fore.YELLOW, Fore.RESET))
 
 
 def extend(lst): return itertools.chain(lst, itertools.repeat(lst[-1]))
 
 
 print("""{}   {}Super Resolution for images and videos powered by Deep Learning!{}
-  - Code licensed as AGPLv3, models under CC BY-NC-SA.{}""".format(ansi.CYAN_B, __doc__, ansi.CYAN, ansi.ENDC))
+  - Code licensed as AGPLv3, models under CC BY-NC-SA.{}""".format(Fore.CYAN, __doc__, Fore.CYAN, Fore.RESET))
 
 # Load the underlying deep learning libraries based on the device specified.  If you specify THEANO_FLAGS manually,
 # the code assumes you know what you are doing and they are not overridden!
@@ -134,7 +123,7 @@ os.environ.setdefault('THEANO_FLAGS', 'floatX=float32,device={},force_device=Tru
 T.nnet.softminus = lambda x: x - T.nnet.softplus(x)
 
 
-print('{}  - Using the device `{}` for neural computation.{}\n'.format(ansi.CYAN, theano.config.device, ansi.ENDC))
+print('{}  - Using the device `{}` for neural computation.{}\n'.format(Fore.CYAN, theano.config.device, Fore.RESET))
 
 
 # ======================================================================================================================
@@ -473,20 +462,21 @@ class NeuralEnhancer(object):
     def __init__(self, loader):
         if args.train:
             print('{}Training {} epochs on random image sections with batch size {}.{}'\
-                  .format(ansi.BLUE_B, args.epochs, args.batch_size, ansi.BLUE))
+                  .format(Fore.BLUE, args.epochs, args.batch_size, Fore.BLUE))
         else:
-            if len(args.files) == 0: error("Specify the image(s) to enhance on the command-line.")
+            if len(args.files) == 0:
+                error("Specify the image(s) to enhance on the command-line.")
             print('{}Enhancing {} image(s) specified on the command-line.{}'
-                  .format(ansi.BLUE_B, len(args.files), ansi.BLUE))
+                  .format(Fore.BLUE, len(args.files), Fore.BLUE))
 
         self.thread = DataLoader() if loader else None
         self.model = Model()
 
-        print('{}'.format(ansi.ENDC))
+        print('{}'.format(Fore.RESET))
 
     @staticmethod
-    def imsave(fn, img):
-        scipy.misc.toimage(np.transpose(img + 0.5, (1, 2, 0)).clip(0.0, 1.0) * 255.0, cmin=0, cmax=255).save(fn)
+    def imsave(fn, imag):
+        scipy.misc.toimage(np.transpose(imag + 0.5, (1, 2, 0)).clip(0.0, 1.0) * 255.0, cmin=0, cmax=255).save(fn)
 
     def show_progress(self, orign, scald, repro):
         os.makedirs('valid', exist_ok=True)
@@ -535,7 +525,7 @@ class NeuralEnhancer(object):
                 total /= args.epoch_size
                 stats /= args.epoch_size
                 totals, labels = [sum(total)] + list(total), ['total', 'prcpt', 'smthn', 'advrs']
-                gen_info = ['{}{}{}={:4.2e}'.format(ansi.WHITE_B, k, ansi.ENDC, v) for k, v in zip(labels, totals)]
+                gen_info = ['{}{}{}={:4.2e}'.format(Fore.WHITE, k, Fore.RESET, v) for k, v in zip(labels, totals)]
                 print('\rEpoch #{} at {:4.1f}s, lr={:4.2e}{}'.format(epoch+1, time.time()-start, l_r, ' '*(args.epoch_size-30)))
                 print('  - generator {}'.format(' '.join(gen_info)))
 
@@ -553,9 +543,9 @@ class NeuralEnhancer(object):
         except KeyboardInterrupt:
             pass
 
-        print('\n{}Trained {}x super-resolution for {} epochs.{}'.format(ansi.CYAN_B, args.zoom, epoch+1, ansi.CYAN))
+        print('\n{}Trained {}x super-resolution for {} epochs.{}'.format(Fore.CYAN, args.zoom, epoch+1, Fore.CYAN))
         self.model.save_generator()
-        print(ansi.ENDC)
+        print(Fore.RESET)
 
     @staticmethod
     def match_histograms(A, B, rng=(0.0, 255.0), bins=64):
@@ -594,6 +584,7 @@ class NeuralEnhancer(object):
 
 
 if __name__ == "__main__":
+    colorama.init()
     if args.train:
         args.zoom = 2**(args.generator_upscale - args.generator_downscale)
         enhancer = NeuralEnhancer(loader=True)
@@ -606,4 +597,4 @@ if __name__ == "__main__":
             out = enhancer.process(img)
             out.save(os.path.splitext(filename)[0]+'_ne%ix.png' % args.zoom)
             print(flush=True)
-        print(ansi.ENDC)
+        print(Fore.RESET)
