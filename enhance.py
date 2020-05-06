@@ -137,9 +137,9 @@ T.nnet.softminus = lambda x: x - T.nnet.softplus(x)
 print('{}  - Using the device `{}` for neural computation.{}\n'.format(ansi.CYAN, theano.config.device, ansi.ENDC))
 
 
-#======================================================================================================================
+# ======================================================================================================================
 # Image Processing
-#======================================================================================================================
+# ======================================================================================================================
 class DataLoader(threading.Thread):
 
     def __init__(self):
@@ -553,7 +553,8 @@ class NeuralEnhancer(object):
         self.model.save_generator()
         print(ansi.ENDC)
 
-    def match_histograms(self, A, B, rng=(0.0, 255.0), bins=64):
+    @staticmethod
+    def match_histograms(A, B, rng=(0.0, 255.0), bins=64):
         (Ha, Xa), (Hb, Xb) = [np.histogram(i, bins=bins, range=rng, density=True) for i in [A, B]]
         X = np.linspace(rng[0], rng[1], bins, endpoint=True)
         Hpa, Hpb = [np.cumsum(i) * (rng[1] - rng[0]) ** 2 / float(bins) for i in [Ha, Hb]]
