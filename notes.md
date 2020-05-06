@@ -112,3 +112,12 @@ floatX=float32,device=gpu,optimizer_including=cudnn,dnn.enabled=True,blas.ldflag
 
 (Yes, this line means you have to install OpenBLAS and CuDNN also, but the tutorial covers this part too)
 
+##### How to run from PowerShell
+
+```
+$Env:THEANO_FLAGS="floatX=float32,device=gpu,optimizer_including=cudnn,dnn.enabled=True,blas.ldflags=-LD:/bin/OpenBLAS-v0.2.14-Win64-int32/bin -lopenblas"
+$Env:OPEN_IMAGES_PATH="train\mon3"
+python enhance.py --train "$Env:OPEN_IMAGES_PATH\*.png" --type photo --model default --epochs=50 --batch-shape=256 --device=gpu --generator-downscale=0 --generator-up
+scale=1 --generator-blocks=8 --generator-filters=128 --generator-residual=0 --perceptual-layer=conv2_2 --smoothness-weight=1e7 --adversary-weight=0.0 --train-noise=1.0 --batch-size=10
+```
+
